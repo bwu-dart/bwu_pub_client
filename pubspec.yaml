@@ -1,0 +1,17 @@
+name: bwu_pub_client
+version: 0.1.0
+description: Easy access to pub.dartlang.org remote API from Dart.
+author: Günter Zöchbauer <guenter@gzoechbauer.com>
+homepage: https://github.com/bwu-dart/bwu_pub_client
+environment:
+  sdk: '>=1.9.0 <2.0.0'
+
+dependencies:
+  http: '^0.11.2'
+  logging: '^0.11.1'
+
+dev_dependencies:
+  grinder: '^0.7.1+3'
+  quiver_log: '^1.0.3'
+  stack_trace: '^1.3.2'
+  test: '^0.12.2'
