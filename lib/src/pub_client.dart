@@ -4,6 +4,8 @@ import 'dart:async' show Future, Stream;
 import 'dart:convert' show JSON;
 import 'package:logging/logging.dart';
 import 'package:http/http.dart' as http;
+import 'package:pub_semver/pub_semver.dart' as semver;
+import 'package:quiver/core.dart' as qu;
 
 final _log = new Logger('bwu_pub_client.src.pub_client');
 
@@ -15,46 +17,72 @@ Uri packageUri(String name) =>
 Uri pageUri(int page) =>
     Uri.parse('https://pub.dartlang.org/api/packages?page=${page}');
 
+Uri versionUri(String name, String version) => Uri
+    .parse('https://pub.dartlang.org/api/packages/${name}/versions/${version}');
+
 class PubClient {
   http.Client httpClient;
+  final Set<PubPackage> packageCache = new Set<PubPackage>();
+  final Set<Version> versionCache = new Set<Version>();
+  final Set<PubDartlangPage> pageCache = new Set<PubDartlangPage>();
 
   PubClient(this.httpClient);
 
-  Future<PubDartlangPage> fetchPage(int page) async {
-    final response = (await httpClient.get(pageUri(page))).body;
-    _log.finest('fetch page: ${pageUri(page)}');
-    _log.finest(response);
-    final pubPage = new PubDartlangPage.fromJson(JSON.decode(response));
+  PubPackage packageFromCache(String name) =>
+      packageCache.firstWhere((p) => p.name == name, orElse: () => null);
 
-    await for(final p in pubPage.packages) {// .getRange(0, 10), (p) {
-      await fetchPackage(p);
+  PubDartlangPage pageFromCache(int page) =>
+      pageCache.firstWhere((p) => p.page == page, orElse: () => null);
+
+  Version versionFromCache(String packageName, Version version) => versionCache
+      .firstWhere((v) => v.parent.name == packageName && v == version,
+          orElse: () => null);
+
+  Future<PubDartlangPage> fetchPage(int page) async {
+    PubDartlangPage pubPage = pageFromCache(page);
+    if (pubPage != null) {
+      return pubPage;
     }
+    _log.finest('fetch page: ${pageUri(page)}');
+    final response = (await httpClient.get(pageUri(page))).body;
+    _log.finest(response);
+    pubPage = new PubDartlangPage.fromJson(page, JSON.decode(response));
     return pubPage;
   }
 
-  Future<PubPackage> fetchPackageByName(String name) async {
-    final response = (await httpClient.get(packageUri(name))).body;
-    _log.finest('fetch page: ${packageUri(name)}');
-    _log.finest(response);
-    return fetchPackage(new PubPackage.fromJson(JSON.decode(response)));
-  }
-
-  Future<PubPackage> fetchPackage(PubPackage p) async {
-    final response = (await httpClient.get(p.url)).body;
-    _log.finest('fetch package: ${p.url}');
-    _log.finest(response);
-    p.loadFromJson(JSON.decode(response));
-    await for (final v in p.versions) {
-      await fetchVersion(v);
+  Future<PubPackage> fetchPackage(String name) async {
+    PubPackage package = packageFromCache(name);
+    if (package != null) {
+      return package;
     }
-    return p;
+    final uri = packageUri(name);
+    _log.finest('fetch page: ${uri}');
+    final response = (await httpClient.get(uri)).body;
+    _log.finest(response);
+    return new PubPackage.fromJson(JSON.decode(response), isLoaded: true);
   }
 
-  Future<Version> fetchVersion(Version v) async {
-    final response = (await httpClient.get(v.url)).body;
-    _log.finest('fetch version: ${v.url}');
+  Future<Null> loadPackage(PubPackage p) async {
+    if (p.isLoaded) {
+      return;
+    }
+    ;
+    final url = packageUri(p.name);
+    _log.finest('fetch package: ${url}');
+    final response = (await httpClient.get(url)).body;
     _log.finest(response);
-    return v..loadFromJson(JSON.decode(response));
+    p.loadFromJson(JSON.decode(response), isLoaded: true);
+  }
+
+  Future<Null> loadVersion(PubPackage p, Version v) async {
+    if (v.isLoaded) {
+      return;
+    }
+    final url = versionUri(p.name, v.version.toString());
+    _log.finest('fetch version: ${url}');
+    final response = (await httpClient.get(url)).body;
+    _log.finest(response);
+    v..loadFromJson(JSON.decode(response), isLoaded: true);
   }
 }
 
@@ -74,10 +102,15 @@ String getAuthorName(String author) {
 }
 
 class Version {
+  PubPackage parent;
+  /// If `false` it is only initialized from data sent along with package
+  /// information.
+  /// If `true` it is initialized from an explicit version request.
+  bool isLoaded = false;
   Pubspec pubspec;
-  Uri url;
+//  Uri url;
   Uri archiveUrl;
-  String version;
+  semver.Version version;
   Uri newDartdocUrl;
   Uri packageUrl;
   int downloads;
@@ -87,8 +120,10 @@ class Version {
 
   Version();
 
-  factory Version.fromJson(Map json) {
-    return new Version()..loadFromJson(json);
+  factory Version.fromJson(PubPackage parent, Map json) {
+    return new Version()
+      ..parent = parent
+      ..loadFromJson(json);
   }
 
   static const supportedProps = const [
@@ -104,20 +139,23 @@ class Version {
     'uploader'
   ];
 
-  loadFromJson(Map json) {
+  loadFromJson(Map json, {bool isLoaded: false}) {
     if (json == null) {
       return;
     }
-    pubspec = new Pubspec.fromJson(json['pubspec']);
+    if (isLoaded) {
+      this.isLoaded = true;
+    }
+    pubspec = new Pubspec.fromJson(this, json['pubspec']);
 
-    final url = json['url'];
-    if (url != null) this.url = Uri.parse(url);
+//    final url = json['url'];
+//    if (url != null) this.url = Uri.parse(url);
 
     final archiveUrl = json['archive_url'];
     if (archiveUrl != null) this.archiveUrl = Uri.parse(archiveUrl);
 
     final version = json['version'];
-    if (version != null) this.version = version;
+    if (version != null) this.version = new semver.Version.parse(version);
 
     final newDartdocUrl = json['new_dartdoc_url'];
     if (newDartdocUrl != null) this.newDartdocUrl = Uri.parse(newDartdocUrl);
@@ -152,14 +190,13 @@ class Version {
   }
 
   @override
-  int get hashCode => version.hashCode;
+  int get hashCode => qu.hash2(parent, version);
 
   @override
   bool operator ==(other) {
-    if (other == null) return false;
-    if (identical(this, other)) return true;
     if (other is! Version) return false;
-    return url == other.url && version == other.version;
+    return parent == (other as Version).parent &&
+        version == (other as Version).version;
   }
 }
 
@@ -168,6 +205,7 @@ class PubDartlangPage {
   Uri nextUrl;
   final List<PubPackage> packages = <PubPackage>[];
   int pages;
+  int page;
 
   static const supportedProps = const [
     'prev_url',
@@ -176,7 +214,8 @@ class PubDartlangPage {
     'packages'
   ];
 
-  PubDartlangPage.fromJson(Map json) {
+  PubDartlangPage.fromJson(int page, Map json) {
+    this.page = page;
     final prevUrl = json['prev_url'];
     if (prevUrl != null) this.prevUrl = Uri.parse(prevUrl);
 
@@ -203,11 +242,24 @@ class PubDartlangPage {
           'Page: (prev)${prevUrl} doesn\'t save these properties: ${jsonProps}');
     }
   }
+
+  @override
+  int get hashCode => page.hashCode;
+
+  @override
+  bool operator ==(other) {
+    if (other is! PubDartlangPage) return false;
+    return page == other.page;
+  }
 }
 
 class PubPackage {
   String name;
-  Uri url;
+  /// If `false` it is only initialized from data sent along with a page
+  /// information.
+  /// If `true` it is initialized from an explicit package request.
+  bool isLoaded = false;
+//  Uri url;
   Uri uploadersUrl;
   Uri newVersionUrl;
   Uri versionUrl;
@@ -231,19 +283,20 @@ class PubPackage {
     'versions'
   ];
 
-  factory PubPackage.fromJson(Map json) {
-    return new PubPackage()..loadFromJson(json);
+  factory PubPackage.fromJson(Map json, {bool isLoaded: false}) {
+    return new PubPackage()..loadFromJson(json, isLoaded: isLoaded);
   }
 
   PubPackage();
 
-  void loadFromJson(Map json) {
+  void loadFromJson(Map json, {bool isLoaded: false}) {
     if (json == null) return;
+    if (isLoaded) this.isLoaded = isLoaded;
 
     name = json['name'];
 
-    final url = json['url'];
-    if (url != null) this.url = Uri.parse(url);
+//    final url = json['url'];
+//    if (url != null) this.url = Uri.parse(url);
 
     final uploadersUrl = json['uploaders_url'];
     if (uploadersUrl != null) this.uploadersUrl = Uri.parse(uploadersUrl);
@@ -254,7 +307,7 @@ class PubPackage {
     final versionUrl = json['version_url'];
     if (versionUrl != null) this.versionUrl = Uri.parse(versionUrl);
 
-    latest = new Version.fromJson(json['latest']);
+    latest = new Version.fromJson(this, json['latest']);
 
     final created = json['created'];
     if (created != null) this.createdAt = DateTime.parse(created);
@@ -267,7 +320,7 @@ class PubPackage {
 
     final versions = json['versions'];
     if (versions != null) {
-      this.versions.addAll(versions.map((v) => new Version.fromJson(v)));
+      this.versions.addAll(versions.map((v) => new Version.fromJson(this, v)));
     }
 
     // Report unsupported properties.
@@ -283,13 +336,23 @@ class PubPackage {
           'Package: ${name} doesn\'t save these properties: ${jsonProps}');
     }
   }
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  bool operator ==(other) {
+    if (other is! PubPackage) return false;
+    return name == other.name;
+  }
 }
 
 class Pubspec {
+  Version parent;
   String version;
   String description;
-  Map<String, String> dependencies;
-  Map<String, String> devDependencies;
+  Map<String, Dependency> dependencies;
+  Map<String, Dependency> devDependencies;
   String author;
   List<String> authors = <String>[];
   String documentation;
@@ -322,13 +385,27 @@ class Pubspec {
     'package_url'
   ];
 
-  Pubspec.fromJson(Map json) {
+  Pubspec.fromJson(Version parent, Map json) {
+    this.parent = parent;
     if (json == null) return;
-
     version = json['version'];
     description = json['description'];
-    dependencies = json['dependencies'];
-    devDependencies = json['dev_dependencies'];
+    final Map deps = json['dependencies'];
+    if (deps != null) {
+      dependencies = new Map.fromIterable(deps.keys,
+          key: (k) => k, value: (k) => new Dependency.fromJson(this, deps[k]));
+    } else {
+      dependencies = {};
+    }
+    final devDeps = json['dev_dependencies'];
+    if (devDeps != null) {
+      devDependencies = new Map.fromIterable(devDeps.keys,
+          key: (k) => k,
+          value: (k) => new Dependency.fromJson(this, devDeps[k]));
+    } else {
+      devDependencies = {};
+    }
+
     author = json['author'];
     final authors = json['authors'];
     if (authors != null) {
@@ -367,3 +444,63 @@ class Pubspec {
     }
   }
 }
+
+class Dependency {
+  Pubspec parent;
+  final DependencyKind kind;
+  final semver.VersionConstraint versionConstraint;
+  /// For a path dependency the path.
+  /// For a Git dependency the url.
+  final String path;
+  /// For a Git dependency the ref (tag, commit, branch)
+  final String ref;
+
+  Dependency(
+      this.parent, this.kind, this.versionConstraint, this.path, this.ref);
+
+  factory Dependency.fromJson(Pubspec parent, json) {
+    DependencyKind kind;
+    semver.VersionConstraint constraint;
+    String path;
+    String ref;
+
+    if (json is String || json == null) {
+      kind = DependencyKind.hosted;
+      if (json != null) {
+        constraint = new semver.VersionConstraint.parse(json);
+      } else {
+        constraint = semver.VersionConstraint.any;
+      }
+    } else {
+      if (json.keys.length > 1) {
+        throw 'Unsupported dependency: ${json}';
+      }
+      switch (json.keys.first) {
+        case 'sdk':
+          kind = DependencyKind.sdk;
+          path = json[json.keys.first];
+          break;
+        case 'path':
+          kind = DependencyKind.path;
+          path = json[json.keys.first];
+          break;
+        case 'git':
+          kind = DependencyKind.git;
+          if (json['git'] is String) {
+            path = json['git'];
+          } else if (json['git'] is Map) {
+            path = json['git']['url'];
+            ref = json['git']['ref'];
+          } else {
+            throw 'Not supported Git dependency definition.';
+          }
+          break;
+        default:
+          throw 'Unsupported dependency: ${json}';
+      }
+    }
+    return new Dependency(parent, kind, constraint, path, ref);
+  }
+}
+
+enum DependencyKind { hosted, sdk, git, path, }

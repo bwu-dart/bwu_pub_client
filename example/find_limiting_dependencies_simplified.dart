@@ -1,16 +1,3 @@
-BWU PubClient
-======
-
-Easy access to pub.dartlang.org remote API from Dart.
-
-# Example
-
-It's not the simplest example but one I needed.
-For a given package it prints which dependency has a dependency constraint 
-(direct or transitive) that prevents updating to the latest version 
-
-```Dart
-
 library bwu_pub_client.example.check_dependencies;
 
 import 'dart:async' show Future, Stream;
@@ -29,12 +16,10 @@ main() async {
       await findLimitingDependencies(pubClient, startPackageName);
   outdated.forEach((k, v) {
     print(
-        '"${k}" (latest: ${allDependencies[k].latest.version
-            }) doesn\'t support the latest version of:');
+        '"${k}" (latest: ${allDependencies[k].latest.version}) doesn\'t support the latest version of:');
     v.forEach((e) {
       print(
-          '    "${e}" (${allDependencies[e].latest.version}) - constraint: ${
-              allDependencies[k].latest.pubspec.dependencies[e].versionConstraint}');
+          '    "${e}" (${allDependencies[e].latest.version}) - constraint: ${allDependencies[k].latest.pubspec.dependencies[e].versionConstraint}');
     });
   });
 }
@@ -90,8 +75,8 @@ Map<String, Set<String>> outdatedDependencies() {
   return result;
 }
 
-/// Builds a map from each dependency to the packages which depend on this 
-/// dependency (from the set of transitive dependencies of the 
+/// Builds a map from each dependency to the packages which depend on this
+/// dependency (from the set of transitive dependencies of the
 /// `startPackageName`).
 Map<String, List<String>> findDependingPackages() {
   final result = {};
@@ -109,21 +94,3 @@ List<String> findDependingOn(String name) {
           allDependencies[k].latest.pubspec.dependencies.containsKey(name))
       .toList();
 }
-
-```
-
-prints for example
-
-```
-"gcloud" (latest: 0.2.0+1) doesn't support the latest version of:
-    "googleapis_beta" (0.14.0) - constraint: >=0.10.0 <0.13.0
-    "googleapis" (0.10.0) - constraint: >=0.2.0 <0.9.0
-"appengine" (latest: 0.3.0) doesn't support the latest version of:
-    "logging" (0.11.1) - constraint: >=0.9.3 <0.10.0
-```
-
-which shows that the package `appengine` has a constraint on `logging` which 
-prevents to update to the latest `logging` version and that `appengine` also 
-has a dependency on `gcloud` which isself has too narrow constraints for
-`googleapis_beta` and `googleapis` to update to the newest versions of these
-dependencies.

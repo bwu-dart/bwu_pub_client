@@ -4,7 +4,7 @@ import 'package:grinder/grinder.dart';
 
 main(List<String> args) => grind(args);
 
-const existingSourceDirs = const ['lib', 'example', 'test', 'tool'];
+const existingSourceDirs = const ['example', 'lib', 'test', 'tool'];
 
 @Task('Run analyzer')
 analyze() => _analyze();
