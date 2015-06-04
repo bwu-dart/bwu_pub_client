@@ -1,34 +1,19 @@
-library bwu_pub_client.example.check_dependencies;
+library bwu_pub_client.src.limiting_dependencies;
 
 import 'dart:async' show Future, Stream;
 import 'dart:collection';
 import 'package:bwu_pub_client/bwu_pub_client.dart';
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart' show Logger, Level;
-import 'package:quiver_log/log.dart' show BASIC_LOG_FORMATTER, PrintAppender;
-import 'package:stack_trace/stack_trace.dart' show Chain;
 
 final _log = new Logger('check_dependencies');
 
-const startPackageName = 'grinder';
-
 Map<String, PubPackage> allDependencies = <String, PubPackage>{};
 
-void main(List<String> args) {
-  Logger.root.level = Level.FINEST;
-  var appender = new PrintAppender(BASIC_LOG_FORMATTER);
-  appender.attachLogger(Logger.root);
-
-  Chain.capture(() => _main(), onError: (error, stack) {
-    _log.shout(error);
-    _log.shout(stack.terse);
-  });
-}
-
-_main() async {
+Future<Null> printLimitingDependencies(String package) async {
   final pubClient = new PubClient(new http.Client());
   Map<String, Set<String>> outdated =
-      await findLimitingDependencies(pubClient, startPackageName);
+      await findLimitingDependencies(pubClient, package);
   outdated.forEach((k, v) {
     print(
         '"${k}" (latest: ${allDependencies[k].latest.version}) doesn\'t support the latest version of:');
@@ -55,12 +40,12 @@ Future<Map<String, Set<String>>> findLimitingDependencies(
       }
     }
   }
-  return outdatedDependencies();
+  return _outdatedDependencies();
 }
 
-Map<String, Set<String>> outdatedDependencies() {
+Map<String, Set<String>> _outdatedDependencies() {
   final result = <String, Set<String>>{};
-  final depending = findDependingPackages();
+  final depending = _findDependingPackages();
   depending.forEach((k, v) {
 //    print('${k}, ${v}');
     v.forEach((d) {
@@ -78,16 +63,16 @@ Map<String, Set<String>> outdatedDependencies() {
   return result;
 }
 
-Map<String, List<String>> findDependingPackages() {
+Map<String, List<String>> _findDependingPackages() {
   final result = {};
   allDependencies.forEach((k, v) {
-    final dependencies = findDependingOn(k);
+    final dependencies = _findDependingOn(k);
     result[k] = dependencies;
   });
   return result;
 }
 
-List<String> findDependingOn(String name) {
+List<String> _findDependingOn(String name) {
   return allDependencies.keys
       .where((k) =>
           allDependencies[k].latest.pubspec.dependencies.containsKey(name))
