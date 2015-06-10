@@ -3,8 +3,8 @@ BWU PubClient
 
 [![Star this Repo](https://img.shields.io/github/stars/bwu-dart/bwu_pub_client.svg?style=flat)](https://github.com/bwu-dart/bwu_pub_client)
 [![Pub Package](https://img.shields.io/pub/v/bwu_pub_client.svg?style=flat)](https://pub.dartlang.org/packages/bwu_pub_client)
-[![Build Status](https://travis-ci.org/bwu-dart/bwu_pub_client.svg?branch=travis)](https://travis-ci.org/bwu-dart/bwu_pub_client)
-[![Coverage Status](https://coveralls.io/repos/bwu-dart/bwu_pub_client/badge.svg)](https://coveralls.io/r/bwu-dart/bwu_pub_client)
+[![Build Status](https://travis-ci.org/bwu-dart/bwu_pub_client.svg?branch=master)](https://travis-ci.org/bwu-dart/bwu_pub_client)
+[![Coverage Status](https://coveralls.io/repos/bwu-dart/bwu_pub_client/badge.svg?branch=master)](https://coveralls.io/r/bwu-dart/bwu_pub_client)
 
 Easy access to pub.dartlang.org remote API from Dart.
 
